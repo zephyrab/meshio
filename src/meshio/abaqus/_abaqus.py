@@ -116,19 +116,21 @@ def read_buffer(f):
     cell_sets = {}
     cell_sets_element = {}  # Handle cell sets defined in ELEMENT
     cell_sets_element_order = []  # Order of keys is not preserved in Python 3.5
+    sections = {}
+    materials = {}
     field_data = {}
     cell_data = {}
     point_data = {}
     point_ids = None
 
-    line = f.readline()
+    line: str = f.readline()
     while True:
         if not line:  # EOF
             break
 
         # Comments
         if line.startswith("**"):
-            line = f.readline()
+            line: str = f.readline()
             continue
 
         keyword = line.partition(",")[0].strip().replace("*", "").upper()
@@ -177,6 +179,16 @@ def read_buffer(f):
                         cell_sets[name].append(cell_sets_element[set_name])
                     else:
                         raise ReadError(f"Unknown cell set '{set_name}'")
+        elif keyword == "SOLID SECTION":  # map element sections to materials
+            for txt in line.split(" "):
+                if txt.startswith("ELSET="):
+                    set_name = txt.removeprefix("ELSET=")
+                elif txt.startswith("MATERIAL="):
+                    mat_name = txt.removeprefix("MATERIAL=")
+            sections.update({set_name: mat_name})
+        elif keyword == "MATERIAL":
+            mat_name = line.split(" ")[-1].removeprefix("NAME=")
+            # then need to read the material data on the lines (ELASTIC, Etc.)
         elif keyword == "INCLUDE":
             # Splitting line to get external input file path (example: *INCLUDE,INPUT=wInclude_bulk.inp)
             ext_input_file = pathlib.Path(line.split("=")[-1].strip())
@@ -200,10 +212,10 @@ def read_buffer(f):
                     cell_sets,
                 )
 
-            line = f.readline()
+            line: str = f.readline()
         else:
             # There are just too many Abaqus keywords to explicitly skip them.
-            line = f.readline()
+            line: str = f.readline()
 
     # Parse cell sets defined in ELEMENT
     for i, name in enumerate(cell_sets_element_order):
@@ -285,7 +297,14 @@ def _read_cells(f, params_map, point_ids):
 
 
 def merge(
-    mesh, points, cells, point_data, cell_data, field_data, point_sets, cell_sets
+    mesh,
+    points,
+    cells,
+    point_data,
+    cell_data,
+    field_data,
+    point_sets,
+    cell_sets
 ):
     """
     Merge Mesh object into existing containers for points, cells, sets, etc..
@@ -431,7 +450,7 @@ def write(
                     f.write(f"*ELSET, ELSET={k}\n")
                     f.write(
                         ",\n".join(
-                            ",".join(els[i : i + nnl]) for i in range(0, len(els), nnl)
+                            ",".join(els[i: i + nnl]) for i in range(0, len(els), nnl)
                         )
                         + "\n"
                     )
@@ -441,7 +460,7 @@ def write(
             nds = [str(i + 1) for i in v]
             f.write(f"*NSET, NSET={k}\n")
             f.write(
-                ",\n".join(",".join(nds[i : i + nnl]) for i in range(0, len(nds), nnl))
+                ",\n".join(",".join(nds[i: i + nnl]) for i in range(0, len(nds), nnl))
                 + "\n"
             )
 
